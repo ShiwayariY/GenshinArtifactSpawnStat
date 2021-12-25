@@ -6,3 +6,6 @@ dependencies
 /bin/
 /build/
 /lib/
+/resource_raw/
+/resource/
+.clang-format
