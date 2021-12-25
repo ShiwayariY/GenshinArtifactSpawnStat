@@ -26,6 +26,7 @@ add_executable(GenshinArtifactSpawnStat WIN32
 	src/DropSelectHandler.cc
 	resource.qrc
 	BreezeStyleSheets/breeze.qrc
+	resource.rc
 )
 
 target_link_libraries(GenshinArtifactSpawnStat
