@@ -98,7 +98,7 @@ void InvestigationEntry::zoom(double factor) {
 
 	m_screenshot_image = m_screenshot_image.scaled(m_screenshot_image.size() * factor);
 	m_screenshot_label->setPixmap(m_screenshot_image);
-	m_screenshot_label->setFixedSize(m_map_image.size());
+	m_screenshot_label->setFixedSize(m_screenshot_image.size());
 
 	resize(size().width(), 500);
 }
