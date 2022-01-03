@@ -1,7 +1,10 @@
 #include <filesystem>
+#include <sstream>
+#include <iomanip>
 
 #include <QtWidgets/QVBoxLayout>
 #include <QtWidgets/QHBoxLayout>
+#include <QtWidgets/QGridLayout>
 #include <QtWidgets/QSizePolicy>
 #include <QtGui/QImageReader>
 #include <QtGui/QPixmap>
@@ -61,14 +64,26 @@ void InvestigationEntry::load_images(const QString& map_path, const QString& scr
 }
 
 void InvestigationEntry::init_drop_choice_box() {
+	m_1_one_star_stats_label = new QLabel{ "- %" };
+	m_2_one_star_stats_label = new QLabel{ "- %" };
+	m_1_two_star_stats_label = new QLabel{ "- %" };
+	m_record_num_label = new QLabel{ "Records: -" };
+	m_avg_exp_label = new QLabel{ "Avg. exp: -" };
+
 	m_1_one_star_button = new QRadioButton{ "★" };
 	m_2_one_star_button = new QRadioButton{ "★ x2" };
 	m_1_two_star_button = new QRadioButton{ "★★" };
 
-	QVBoxLayout* drop_choice_layout = new QVBoxLayout;
-	drop_choice_layout->addWidget(m_1_one_star_button);
-	drop_choice_layout->addWidget(m_2_one_star_button);
-	drop_choice_layout->addWidget(m_1_two_star_button);
+	auto* drop_choice_layout = new QGridLayout;
+	drop_choice_layout->addWidget(m_1_one_star_stats_label, 0, 0);
+	drop_choice_layout->addWidget(m_2_one_star_stats_label, 1, 0);
+	drop_choice_layout->addWidget(m_1_two_star_stats_label, 2, 0);
+	drop_choice_layout->setColumnMinimumWidth(1, 10);
+	drop_choice_layout->addWidget(m_1_one_star_button, 0, 2);
+	drop_choice_layout->addWidget(m_2_one_star_button, 1, 2);
+	drop_choice_layout->addWidget(m_1_two_star_button, 2, 2);
+	drop_choice_layout->addWidget(m_record_num_label, 3, 0, 1, 3);
+	drop_choice_layout->addWidget(m_avg_exp_label, 4, 0, 1, 3);
 
 	m_drop_choice_widget = new QWidget;
 	m_drop_choice_widget->setStyleSheet("background-color: rbga(0,0,0,0)");
@@ -91,6 +106,31 @@ InvestigationEntry::Drop InvestigationEntry::drop() const {
 	return Drop::None;
 }
 
+void InvestigationEntry::set_drop(Drop drop) {
+	m_1_one_star_button->setAutoExclusive(false);
+	m_2_one_star_button->setAutoExclusive(false);
+	m_1_two_star_button->setAutoExclusive(false);
+	switch (drop) {
+		case Drop::SingleOneStar:
+			m_1_one_star_button->setChecked(true);
+			break;
+		case Drop::DoubleOneStar:
+			m_2_one_star_button->setChecked(true);
+			break;
+		case Drop::SingleTwoStar:
+			m_1_two_star_button->setChecked(true);
+			break;
+		case Drop::None:
+			m_1_one_star_button->setChecked(false);
+			m_2_one_star_button->setChecked(false);
+			m_1_two_star_button->setChecked(false);
+			break;
+	}
+	m_1_one_star_button->setAutoExclusive(true);
+	m_2_one_star_button->setAutoExclusive(true);
+	m_1_two_star_button->setAutoExclusive(true);
+}
+
 void InvestigationEntry::zoom(double factor) {
 	m_map_image = m_map_image.scaled(m_map_image.size() * factor);
 	m_map_label->setPixmap(m_map_image);
@@ -107,6 +147,35 @@ void InvestigationEntry::enable_choice(bool enable) {
 	m_1_one_star_button->setEnabled(enable);
 	m_2_one_star_button->setEnabled(enable);
 	m_1_two_star_button->setEnabled(enable);
+}
+
+void InvestigationEntry::set_stats(int single_one_star_drops, int double_one_star_drops, int single_two_star_drops) {
+	const auto records = single_one_star_drops + double_one_star_drops + single_two_star_drops;
+	std::ostringstream records_oss;
+	records_oss << "Records: " << records;
+	m_record_num_label->setText(records_oss.str().c_str());
+
+	auto avg_exp = 420.0 * (1.0 * single_one_star_drops + 2.0 * double_one_star_drops + 2.0 * single_two_star_drops);
+	if (records > 0) avg_exp /= static_cast<float>(records);
+	std::ostringstream avg_oss;
+	avg_oss << "Avg. exp: " << std::fixed << std::setprecision(2) << avg_exp;
+	m_avg_exp_label->setText(avg_oss.str().c_str());
+
+	float s1_perc = single_one_star_drops;
+	float d1_perc = double_one_star_drops;
+	float s2_perc = single_two_star_drops;
+	if (records > 0) {
+		s1_perc /= static_cast<float>(records);
+		d1_perc /= static_cast<float>(records);
+		s2_perc /= static_cast<float>(records);
+	}
+	std::ostringstream s1_oss, d1_oss, s2_oss;
+	s1_oss << std::fixed << std::setprecision(2) << 100.0 * s1_perc << " %";
+	d1_oss << std::fixed << std::setprecision(2) << 100.0 * d1_perc << " %";
+	s2_oss << std::fixed << std::setprecision(2) << 100.0 * s2_perc << " %";
+	m_1_one_star_stats_label->setText(s1_oss.str().c_str());
+	m_2_one_star_stats_label->setText(d1_oss.str().c_str());
+	m_1_two_star_stats_label->setText(s2_oss.str().c_str());
 }
 
 }

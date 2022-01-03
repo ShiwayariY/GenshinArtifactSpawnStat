@@ -9,3 +9,8 @@ dependencies
 /resource_raw/
 /resource/
 .clang-format
+/include/cpr/
+/include/curl/
+/include/rapidjson/*
+/include/zconf.h
+/include/zlib.h

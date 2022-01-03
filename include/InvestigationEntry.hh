@@ -19,6 +19,11 @@ class InvestigationEntry : public QFrame {
 	QPixmap m_screenshot_image;
 	QLabel* m_screenshot_label;
 	QWidget* m_drop_choice_widget;
+	QLabel* m_record_num_label;
+	QLabel* m_avg_exp_label;
+	QLabel* m_1_one_star_stats_label;
+	QLabel* m_2_one_star_stats_label;
+	QLabel* m_1_two_star_stats_label;
 	QRadioButton* m_1_one_star_button;
 	QRadioButton* m_2_one_star_button;
 	QRadioButton* m_1_two_star_button;
@@ -39,8 +44,10 @@ public:
 		SingleTwoStar
 	};
 	Drop drop() const;
+	void set_drop(Drop);
 	void zoom(double factor);
 	void enable_choice(bool);
+	void set_stats(int single_one_star_drops, int double_one_star_drops, int single_two_star_drops);
 };
 
 }

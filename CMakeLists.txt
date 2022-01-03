@@ -1,9 +1,16 @@
 cmake_minimum_required(VERSION 3.17)
 project(GenshinArtifactSpawnStat)
 
+set(BUILD_SFX "${PLATFORM}/${CMAKE_BUILD_TYPE}")
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+	set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}" CACHE PATH "CMake install prefix" FORCE)
+endif()
+
 add_compile_options(-Wall -Wextra -pedantic)
 set(CMAKE_CXX_STANDARD 17)
-set(BUILD_SFX "${PLATFORM}/${CMAKE_BUILD_TYPE}")
+
+add_subdirectory(other/cpr)
+
 
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 set(CMAKE_AUTOMOC ON)
@@ -25,14 +32,15 @@ add_executable(GenshinArtifactSpawnStat WIN32
 	include/DropSelectHandler.hh
 	src/DropSelectHandler.cc
 	resource.qrc
-	BreezeStyleSheets/breeze.qrc
+	other/BreezeStyleSheets/breeze.qrc
 	resource.rc
 )
 
 target_link_libraries(GenshinArtifactSpawnStat
 	Qt::Widgets
+	cpr::cpr
 )
 
 install(TARGETS
 	GenshinArtifactSpawnStat
-DESTINATION "${PROJECT_SOURCE_DIR}/bin/${BUILD_SFX}")
+RUNTIME DESTINATION "bin/${BUILD_SFX}")

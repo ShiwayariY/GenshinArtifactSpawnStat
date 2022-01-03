@@ -1,9 +1,12 @@
+#include <iostream>
 #include <fstream>
+#include <sstream>
 #include <iomanip>
 #include <filesystem>
 #include <cmath>
 #include <iterator>
 #include <algorithm>
+#include <array>
 
 #include <QtCore/QSignalBlocker>
 #include <QtWidgets/QMenuBar>
@@ -12,6 +15,13 @@
 #include <QtWidgets/QProgressDialog>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QLayoutItem>
+#include <QtWidgets/QFileDialog>
+#include <QtWidgets/QMessageBox>
+#include <cpr/cpr.h>
+#include <rapidjson/document.h>
+#include <rapidjson/istreamwrapper.h>
+#include <rapidjson/ostreamwrapper.h>
+#include <rapidjson/writer.h>
 
 #include <AppWindow.hh>
 
@@ -43,17 +53,30 @@ AppWindow::AppWindow() {
 	resize(maximumWidth(), 1000);
 	show();
 
+	receive();
 	load_route();
 }
 
 void AppWindow::create_menu() {
+	m_load_action = new QAction{ "&Load" };
+	connect(m_load_action, &QAction::triggered, this, &AppWindow::load);
+
 	m_save_action = new QAction{ "&Save" };
 	m_save_action->setShortcut(QKeySequence::Save);
 	connect(m_save_action, &QAction::triggered, this, &AppWindow::save);
 
+	m_send_action = new QAction("Send");
+	connect(m_send_action, &QAction::triggered, this, &AppWindow::send);
+
 	m_save_route_action = new QAction{ "&Confirm route" };
 	connect(m_save_route_action, &QAction::triggered, this, [this]() {
-		route_mode(false);
+		if (std::filesystem::exists(ROUTE_FILE)) {
+			auto ans = QMessageBox::question(this, "Overwrite route?", "Route file 'route.dat' already exists. Overwrite?");
+			if (ans == QMessageBox::Yes) {
+				route_mode(false);
+				save_route();
+			}
+		}
 	});
 	m_save_route_action->setEnabled(false);
 
@@ -66,7 +89,9 @@ void AppWindow::create_menu() {
 	connect(m_zoom_action, &QAction::triggered, this, &AppWindow::zoom);
 
 	m_file_menu = menuBar()->addMenu("&File");
+	m_file_menu->addAction(m_load_action);
 	m_file_menu->addAction(m_save_action);
+	m_file_menu->addAction(m_send_action);
 	m_edit_menu = menuBar()->addMenu("&Edit");
 	m_edit_menu->addAction(m_edit_route_action);
 	m_edit_menu->addAction(m_save_route_action);
@@ -131,30 +156,105 @@ void AppWindow::add_entry_button() {
 	m_entry_buttons.push_back(entry_button);
 }
 
-void AppWindow::save() const {
-	std::stringstream drop_oss;
-	drop_oss << std::setfill('0');
+std::string AppWindow::drops_as_json() const {
+	namespace rj = rapidjson;
+	rj::Document json{ rj::kArrayType };
 
 	for (auto row : m_row_order) {
-		drop_oss << std::setw(3) << row << "\t";
+		rj::Value row_json{ rj::kArrayType };
+		row_json.PushBack(row, json.GetAllocator());
+		int drop_id = -1;
 
 		switch (m_entries.at(row)->drop()) {
 			case InvestigationEntry::Drop::SingleOneStar:
-				drop_oss << "1\t1\n";
+				drop_id = 0;
 				break;
 			case InvestigationEntry::Drop::DoubleOneStar:
-				drop_oss << "2\t1\n";
+				drop_id = 1;
 				break;
 			case InvestigationEntry::Drop::SingleTwoStar:
-				drop_oss << "1\t2\n";
+				drop_id = 2;
 				break;
 			case InvestigationEntry::Drop::None:
-				drop_oss << "0\t0\n";
+				drop_id = -1;
 				break;
 		}
+		if (drop_id < 0) continue;
+
+		row_json.PushBack(drop_id, json.GetAllocator());
+		json.PushBack(row_json, json.GetAllocator());
 	}
-	std::ofstream ofs{ SAVE_FILE };
-	ofs << drop_oss.str();
+	std::ostringstream oss;
+	rj::OStreamWrapper rj_oss{ oss };
+	rj::Writer<rj::OStreamWrapper> json_writer{ rj_oss };
+	json.Accept(json_writer);
+	return oss.str();
+}
+
+void AppWindow::save() {
+	auto save_file = QFileDialog::getSaveFileName(this, "Save", "", "*.dat");
+	if (!save_file.isNull())
+		std::ofstream{ save_file.toStdString() } << drops_as_json();
+}
+
+void AppWindow::load() {
+	static const std::array<InvestigationEntry::Drop, 3> drop_dict{
+		InvestigationEntry::Drop::SingleOneStar,
+		InvestigationEntry::Drop::DoubleOneStar,
+		InvestigationEntry::Drop::SingleTwoStar
+	};
+
+	auto save_file = QFileDialog::getOpenFileName(this, "Load", "", "*.dat");
+	if (save_file.isNull()) return;
+	std::ifstream ifs{ save_file.toStdString() };
+
+	rapidjson::IStreamWrapper rj_ifs{ ifs };
+	rapidjson::Document json;
+	json.ParseStream(rj_ifs);
+
+	// check input first
+	if (!json.IsArray()) return;
+	for (const auto& drop_arr : json.GetArray()) {
+		if (!drop_arr.IsArray() || drop_arr.Size() != 2) return;
+		const auto& row_val = drop_arr[0];
+		const auto& drop_val = drop_arr[1];
+		if (!row_val.IsInt() || !drop_val.IsInt() || drop_val.GetInt() < 0 || drop_val.GetInt() > 2) return;
+	}
+
+	// input ok -> can modify without errors
+	m_row_order.clear();
+	route_mode(true);
+	for (const auto& drop_arr : json.GetArray()) {
+		const auto& row = drop_arr[0].GetInt();
+		const auto& drop = drop_arr[1].GetInt();
+		m_row_order.push_back(row);
+		m_entries.at(row)->set_drop(drop_dict[drop]);
+	}
+	route_mode(false);
+}
+
+void AppWindow::send() {
+	cpr::Response res = cpr::Post(
+	  cpr::Url{ HOST },
+	  cpr::Body{ "{\"drops\":" + drops_as_json() + "}" },
+	  cpr::Header{ { "Content-Type", "application/json" } });
+
+	rapidjson::Document json;
+	json.Parse(res.text.c_str());
+	if (
+	  res.status_code == 200 &&
+	  json.HasMember("status") &&
+	  json["status"].IsString() &&
+	  json["status"].GetString() == std::string{ "success" }) {
+		QMessageBox::information(this, "Upload successful",
+		  "Your drops have been uploaded. Your selection will be reset.");
+
+		for (auto* entry : m_entries)
+			entry->set_drop(InvestigationEntry::Drop::None);
+	} else {
+		QMessageBox::warning(this, "Upload failed",
+		  "Failed to upload your drops. Go to 'File > Save' or 'File > Load' to save/load your selection and try again later.");
+	}
 }
 
 void AppWindow::zoom() {
@@ -208,7 +308,6 @@ void AppWindow::route_mode(bool activate) {
 		}
 
 		install_keyboard_navigation();
-		save_route();
 	}
 }
 
@@ -238,7 +337,7 @@ void AppWindow::remove_keyboard_navigation() {
 	m_selecthandler = nullptr;
 }
 
-void AppWindow::save_route() {
+void AppWindow::save_route() const {
 	std::ofstream route_ofs{ ROUTE_FILE };
 	for (auto row : m_row_order)
 		route_ofs << row << " ";
@@ -255,6 +354,38 @@ void AppWindow::load_route() {
 			m_row_order.push_back(row);
 
 	route_mode(false);
+}
+
+bool AppWindow::receive() {
+	cpr::Response res = cpr::Get(cpr::Url{ HOST });
+	if (res.status_code != 200) return false;
+
+	rapidjson::Document json;
+	json.Parse(res.text.c_str());
+	if (!(
+		  json.HasMember("error") &&
+		  json["error"].IsBool() &&
+		  !json["error"].GetBool() &&
+		  json.HasMember("drops") &&
+		  json["drops"].IsArray()))
+		return false;
+
+	const auto& drops = json["drops"];
+	// validate data
+	for (const auto& drop_arr : drops.GetArray()) {
+		if (!drop_arr.IsArray() || drop_arr.Size() != 3) return false;
+		for (const auto& num : drop_arr.GetArray())
+			if (!num.IsInt()) return false;
+	}
+
+	for (std::size_t i = 0; i < drops.Size() && i < m_entries.size(); ++i) {
+		const auto& drop_arr = drops[i].GetArray();
+		m_entries[i]->set_stats(
+		  drop_arr[0].GetInt(),
+		  drop_arr[1].GetInt(),
+		  drop_arr[2].GetInt());
+	}
+	return true;
 }
 
 }

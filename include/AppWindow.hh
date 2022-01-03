@@ -17,15 +17,17 @@ namespace GenshinArtifactSpawnStat {
 
 class AppWindow : public QMainWindow {
 
+	inline static constexpr auto HOST = "localhost:3000";
 	inline static constexpr int BUTTON_WIDTH = 50;
 	inline static constexpr int SPACING = 5;
 
-	inline static auto SAVE_FILE = "save.dat";
 	inline static auto ROUTE_FILE = "route.dat";
 
 	QMenu* m_file_menu = nullptr;
 	QMenu* m_edit_menu = nullptr;
+	QAction* m_load_action = nullptr;
 	QAction* m_save_action = nullptr;
+	QAction* m_send_action = nullptr;
 	QAction* m_zoom_action = nullptr;
 	QAction* m_edit_route_action = nullptr;
 	QAction* m_save_route_action = nullptr;
@@ -45,11 +47,15 @@ class AppWindow : public QMainWindow {
 	void install_keyboard_navigation();
 	void remove_keyboard_navigation();
 	void route_mode(bool activate);
-	void save_route();
+	void save_route() const;
 	void load_route();
+	std::string drops_as_json() const;
+	bool receive();
 
 private slots:
-	void save() const;
+	void save();
+	void load();
+	void send();
 	void zoom();
 	void entry_button_action(bool checked, std::size_t row);
 
